@@ -1,6 +1,12 @@
 import os
 import json
 import torch
+import sys
+current_dir = os.getcwd()
+sys.path.append(f"{current_dir}/tortoise-tts")
+sys.path.append(f'{current_dir}/diff2lip/guided-diffusion/guided_diffusion')
+sys.path.append(f'{current_dir}/diff2lip/guided-diffusion')
+sys.path.append(f'{current_dir}/diff2lip')
 
 import torch
 import torchaudio
@@ -11,6 +17,34 @@ from tortoise.utils.audio import load_voices
 from transformers import AutoConfig, AutoModelForSpeechSeq2Seq,WhisperTokenizer,WhisperFeatureExtractor,pipeline
 from transformers import AutoModelForSeq2SeqLM,MBartTokenizer
 
+import dist_util
+import generate
+import argparse
+import cv2
+import os
+from os.path import join, basename, dirname, splitext
+import shutil
+import argparse
+import numpy as np
+import random
+import torch, torchvision
+import subprocess
+from audio import audio
+import face_detection
+from tqdm import tqdm
+from guided_diffusion import dist_util, logger
+from guided_diffusion.resample import create_named_schedule_sampler
+from guided_diffusion.script_util import (
+    tfg_model_and_diffusion_defaults,
+    tfg_create_model_and_diffusion,
+    args_to_dict,
+    add_dict_to_argparser,
+)
+
+from guided_diffusion.tfg_data_util import (
+    tfg_process_batch,
+)
+from generate import *
 def create_whisper():
     current_directory = os.getcwd()
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -75,3 +109,45 @@ def create_txt2aud():
     os.makedirs(f"{current_directory}/text2audio/results/", exist_ok=True)
     tts = TextToSpeech(models_dir=model_dir, use_deepspeed=use_deepspeed, kv_cache=kv_cache, half=half, device = device)
     return tts
+
+def create_diff2lip(diff2lip_model_path):
+    old_config = tfg_model_and_diffusion_defaults()
+
+    new_config = {
+        "attention_resolutions": "32,16,8",
+            "class_cond": False,
+            "learn_sigma": True,
+            "num_channels": 128,
+            "num_head_channels": 64,
+            "num_res_blocks": 2,
+            "resblock_updown": True,
+            "use_fp16": True,
+            "use_scale_shift_norm": False,
+            "predict_xstart": False,
+            "diffusion_steps": 1000,
+            "noise_schedule": "linear",
+            "rescale_timesteps": False,
+            "timestep_respacing": "ddim25",
+            "nframes": 5,
+            "nrefer": 1,
+            "image_size": 128,
+
+            "use_ref": True,
+            "use_audio": True,
+            "audio_as_style": True,
+    }
+    for key in new_config:
+        old_config[key] = new_config[key]
+    model, diffusion = tfg_create_model_and_diffusion(**old_config)
+    model.load_state_dict(
+            dist_util.load_state_dict(path = diff2lip_model_path, map_location='cpu')
+    )
+    model.to(dist_util.dev())
+    if old_config['use_fp16']:
+        model.convert_to_fp16()
+    model.eval()
+
+    detector = face_detection.FaceAlignment(face_detection.LandmarksType._2D, flip_input=False, device='cuda' if torch.cuda.is_available() else 'cpu')
+
+    return detector, model
+
