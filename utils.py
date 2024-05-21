@@ -45,9 +45,9 @@ from guided_diffusion.tfg_data_util import (
     tfg_process_batch,
 )
 from generate import *
-def create_whisper():
+def create_whisper(device = "cpu"):
     current_directory = os.getcwd()
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # device = "cuda" if torch.cuda.is_available() else "cpu"
     # Load config
     config = AutoConfig.from_pretrained(f"{current_directory}/PhoWhisper-medium/config.json")
     model = AutoModelForSpeechSeq2Seq.from_pretrained(f"{current_directory}/PhoWhisper-medium/pytorch_model.bin", config = config)
@@ -66,9 +66,9 @@ def create_whisper():
                     feature_extractor = wExtractor,
                     device = device)
     return speech_recog_pipe
-def create_vi2en_translator():
+def create_vi2en_translator(device = "cpu"):
     current_directory = os.getcwd()
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # device = "cuda" if torch.cuda.is_available() else "cpu"
 
     config = AutoConfig.from_pretrained(f"{current_directory}/vinai-translate-vi2en-v2/config.json")
     vi2en_model = AutoModelForSeq2SeqLM.from_pretrained(f"{current_directory}/vinai-translate-vi2en-v2/pytorch_model.bin", config = config)
@@ -90,10 +90,10 @@ def translate_vi2en(vi_text: str, tokenizer_vi2en, vi2en_model, device = 'cpu') 
 
 
 
-def create_txt2aud():
+def create_txt2aud(device = "cpu"):
     
     current_directory = os.getcwd()
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # device = "cuda" if torch.cuda.is_available() else "cpu"
 
     preset = 'fast'
     use_deepspeed = False
