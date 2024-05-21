@@ -13,6 +13,7 @@ import torchaudio
 from tortoise.api import TextToSpeech,MODELS_DIR
 import os
 from tortoise.utils.audio import load_voices
+import tortoise.utils.audio
 
 from transformers import AutoConfig, AutoModelForSpeechSeq2Seq,WhisperTokenizer,WhisperFeatureExtractor,pipeline
 from transformers import AutoModelForSeq2SeqLM,MBartTokenizer
@@ -90,25 +91,27 @@ def translate_vi2en(vi_text: str, tokenizer_vi2en, vi2en_model, device = 'cpu') 
 
 
 
-def create_txt2aud(device = "cpu"):
+def create_txt2aud(use_deepspeed = False,kv_cache =True,half = True,device = "cpu"):
     
-    current_directory = os.getcwd()
-    # device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    preset = 'fast'
-    use_deepspeed = False
-    kv_cache =True
-    half = True
+    current_directory = os.getcwd()   
     model_dir = MODELS_DIR
-    seed = None
-    produce_debug_state = False
-    cvvp_amount = 0
+    
 
     if torch.backends.mps.is_available():
         use_deepspeed = False
     os.makedirs(f"{current_directory}/text2audio/results/", exist_ok=True)
     tts = TextToSpeech(models_dir=model_dir, use_deepspeed=use_deepspeed, kv_cache=kv_cache, half=half, device = device)
     return tts
+
+def run_txt2aud(en_text, reference_folder,tts,output_audio_name = "output_txt2aud.wav", preset ='fast'):
+    text = en_text
+    audio_output_folder_path = "/content/text2audio/results/"
+    reference_clips_name = [os.listdir(reference_folder)]
+    reference_clips_name = [reference_folder + f"{i}" for i in reference_clips_name]
+    reference_clips = [tortoise.utils.audio.load_audio(p, 22050) for p in reference_clips_name]
+
+    pcm_audio = tts.tts_with_preset(text, voice_samples=reference_clips, preset=preset)
+    torchaudio.save(os.path.join(audio_output_folder_path,output_audio_name ), pcm_audio.squeeze(0).cpu(), 24000)
 
 def create_diff2lip(diff2lip_model_path):
     old_config = tfg_model_and_diffusion_defaults()
