@@ -44,6 +44,23 @@ from guided_diffusion.tfg_data_util import (
     tfg_process_batch,
 )
 from generate import *
+
+import argparse
+import moviepy.editor as mp
+
+def get_raw_aud(video_path, audio_out_path):
+    videoCap = mp.VideoFileClip(video_path)
+    videoLen = videoCap.duration
+    audio = videoCap.subclip(0,videoLen)
+    audio.audio.write_audiofile(audio_out_path)
+
+def get_args():
+    parser = argparse.ArgumentParser(description="Script to launch jigsaw training", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--video_path", "-i", type=str, help="Path of input video")
+    parser.add_argument("--diff2lip_model_path", type=str, help="Path of diff2lip model")
+
+    return parser.parse_args()
+
 def create_whisper(device = "cpu"):
     current_directory = os.getcwd()
     # device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -103,7 +120,7 @@ def create_txt2aud(use_deepspeed = False,kv_cache =True,half = True,device = "cp
 
 def run_txt2aud(en_text, reference_folder,tts,output_audio_name = "output_txt2aud.wav", preset ='fast'):
     text = en_text
-    audio_output_folder_path = f"{os.getcwd}/text2audio/results/"
+    audio_output_folder_path = f"{os.getcwd()}/text2audio/results/"
     reference_clips_name = os.listdir(reference_folder)
     reference_clips_name = [reference_folder + f"/{i}" for i in reference_clips_name]
     reference_clips = [tortoise.utils.audio.load_audio(p, 22050) for p in reference_clips_name]
