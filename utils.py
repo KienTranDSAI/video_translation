@@ -11,7 +11,6 @@ sys.path.append(f'{current_dir}/diff2lip')
 import torch
 import torchaudio
 from tortoise.api import TextToSpeech,MODELS_DIR
-import os
 from tortoise.utils.audio import load_voices
 import tortoise.utils.audio
 
@@ -22,7 +21,6 @@ import dist_util
 import generate
 import argparse
 import cv2
-import os
 from os.path import join, basename, dirname, splitext
 import shutil
 import argparse
@@ -105,13 +103,13 @@ def create_txt2aud(use_deepspeed = False,kv_cache =True,half = True,device = "cp
 
 def run_txt2aud(en_text, reference_folder,tts,output_audio_name = "output_txt2aud.wav", preset ='fast'):
     text = en_text
-    audio_output_folder_path = "/content/text2audio/results/"
-    reference_clips_name = [os.listdir(reference_folder)]
-    reference_clips_name = [reference_folder + f"{i}" for i in reference_clips_name]
+    audio_output_folder_path = f"{os.getcwd}/text2audio/results/"
+    reference_clips_name = os.listdir(reference_folder)
+    reference_clips_name = [reference_folder + f"/{i}" for i in reference_clips_name]
     reference_clips = [tortoise.utils.audio.load_audio(p, 22050) for p in reference_clips_name]
 
     pcm_audio = tts.tts_with_preset(text, voice_samples=reference_clips, preset=preset)
-    torchaudio.save(os.path.join(audio_output_folder_path,output_audio_name ), pcm_audio.squeeze(0).cpu(), 24000)
+    torchaudio.save(os.path.join(audio_output_folder_path,output_audio_name), pcm_audio.squeeze(0).cpu(), 24000)
 
 def create_diff2lip(diff2lip_model_path):
     old_config = tfg_model_and_diffusion_defaults()
@@ -152,5 +150,99 @@ def create_diff2lip(diff2lip_model_path):
 
     detector = face_detection.FaceAlignment(face_detection.LandmarksType._2D, flip_input=False, device='cuda' if torch.cuda.is_available() else 'cpu')
 
-    return detector, model
+    return detector, model, diffusion
+
+def run_diff2lip(detector, model, diffusion, video_path,translated_audio_path, output_path):
+    defaults = dict(
+        # generate from a single audio-video pair
+        generate_from_filelist = False,
+        video_path = "",
+        audio_path = "",
+        out_path = None,
+        save_orig = True,
+
+        #generate from filelist : generate_from_filelist = True
+        test_video_dir = "test_videos",
+        filelist = "test_filelist.txt",
+
+
+        use_fp16 = True,
+        #tfg specific
+        face_hide_percentage=0.5,
+        use_ref=False,
+        use_audio=False,
+        audio_as_style=False,
+        audio_as_style_encoder_mlp=False,
+
+        #data args
+        nframes=1,
+        nrefer=0,
+        image_size=128,
+        syncnet_T = 5,
+        syncnet_mel_step_size = 16,
+        audio_frames_per_video = 16, #for tfg model, we use sound corresponding to 5 frames centred at that frame
+        audio_dim=80,
+        is_voxceleb2=True,
+
+        video_fps=25,
+        sample_rate=16000, #audio sampling rate
+        mel_steps_per_sec=80.,
+
+        #sampling args
+        clip_denoised=True, # not used in training
+        sampling_batch_size=2,
+        use_ddim=False,
+        model_path="",
+        sample_path="d2l_gen",
+        sample_partition="",
+        sampling_seed=None,
+        sampling_use_gt_for_ref=False,
+        sampling_ref_type='gt', #one of ['gt', 'first_frame', 'random']
+        sampling_input_type='gt', #one of ['gt', 'first_frame']
+
+        # face detection args
+        face_det_batch_size=64,
+        pads = "0,0,0,0"
+    )
+    defaults.update(tfg_model_and_diffusion_defaults())
+    parser = argparse.ArgumentParser()
+    add_dict_to_argparser(parser, defaults)
+
+    new_args = [
+    "--attention_resolutions", "32,16,8",
+    "--class_cond", "False",
+    "--learn_sigma", "True",
+    "--num_channels", "128",
+    "--num_head_channels", "64",
+    "--num_res_blocks", "2",
+    "--resblock_updown", "True",
+    "--use_fp16", "True",
+    "--use_scale_shift_norm", "False",
+    "--predict_xstart", "False",
+    "--diffusion_steps", "1000",
+    "--noise_schedule", "linear",
+    "--rescale_timesteps", "False",
+    "--sampling_seed", "7",
+    "--timestep_respacing", "ddim25",
+    "--use_ddim", "True",
+    "--nframes", "5",
+    "--nrefer", "1",
+    "--image_size", "128",
+    "--sampling_batch_size", "4",
+    "--face_hide_percentage", "0.5",
+    "--use_ref", "True",
+    "--use_audio", "True",
+    "--audio_as_style", "True",
+    "--generate_from_filelist", "0",
+    "--save_orig", "False",
+    "--face_det_batch_size", "64",
+    "--pads", "0,0,0,0",
+    "--video_path", f"{video_path}",
+    "--audio_path", f"{translated_audio_path}",
+    "--out_path", f"{output_path}",
+    "--is_voxceleb2", "False"
+    ]
+    args = parser.parse_args(new_args)
+    generate(args.video_path, args.audio_path, model, diffusion, detector,  args, out_path=args.out_path, save_orig=args.save_orig)
+
 
